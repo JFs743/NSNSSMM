@@ -1,0 +1,22 @@
+{
+    "recommendations": [
+        "christian-kohler.path-intellisense",
+        "eamodio.gitlens",
+        "editorconfig.editorconfig",
+        "esbenp.prettier-vscode",
+        "gruntfuggly.todo-tree",
+        "jgclark.vscode-todo-highlight",
+        "ms-vscode.azure-account",
+        "ms-vscode.azure-repos",
+        "ms-vscode.powershell",
+        "ms-vscode.test-adapter-converter",
+        "ms-vsliveshare.vsliveshare",
+        "oderwat.indent-rainbow",
+        "pflannery.vscode-versionlens",
+        "pspester.pester-test",
+        "tylerleonhardt.vscode-inline-values-powershell",
+        "usernamehw.errorlens",
+        "visualstudioexptteam.intellicode-api-usage-examples",
+        "visualstudioexptteam.vscodeintellicode"
+    ]
+}
