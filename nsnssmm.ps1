@@ -364,7 +364,7 @@ switch ($mode) {
         )
         & $nssm_file @nssm_args
 
-            Export-NSNSSMM_Config -Configs $Edit
+        Export-NSNSSMM_Config -Configs $Edit
     }
 
     default {
