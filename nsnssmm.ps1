@@ -78,13 +78,13 @@
 [CmdletBinding()]
 param (
     # mutually exclusive Import, Export and Reset flags
-    [Parameter(Mandatory = $false, ParameterSetName = 'Import')]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Import'), ]
     [string[]]$Import,
 
-    [Parameter(Mandatory = $false, ParameterSetName = 'Export')]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Export')]
     [string[]]$Export,
 
-    [Parameter(Mandatory = $false, ParameterSetName = 'Reset')]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Reset')]
     [string[]]$Reset,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'Edit')]
@@ -143,7 +143,7 @@ function Export-NSNSSMM_Config {
             'Application',
             'AppParameters',
             'AppDirectory',
-            'AppExit',
+            # 'AppExit', # Skipping AppExit as it requires special handling
             'AppAffinity',
             'AppEnvironment',
             'AppEnvironmentExtra',
@@ -179,7 +179,7 @@ function Export-NSNSSMM_Config {
             'ImagePath',
             'ObjectName',
             'Name',
-            'Start-Process',
+            'Start',
             'Type'
         )
 
