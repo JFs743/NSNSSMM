@@ -1,6 +1,6 @@
 # NSNSSMCM
 
-Non-Sucking "Non-Sucking Service Manager" Manager
+Non-Sucking "Non-Sucking Service Manager" Configuration Manager
 
 Because NSSM kinda sucks, actually
 
@@ -36,6 +36,35 @@ C:\InstalledServices\
 
 This structure is opinionated, but it keeps things reproducible and predictable.
 You can deviate — just don’t expect sympathy.
+
+Each `nsnssmcm.json` normally holds a single service object, as above. It can also hold an **array** of service objects instead, for a multi-service deployment that shares one folder (e.g. a small stack of related services installed and versioned together):
+
+```json
+[
+    {
+        "Application": "C:\\Program Files\\nodejs\\node.exe",
+        "AppParameters": "api.js",
+        "AppDirectory": "C:\\InstalledServices\\MyStack",
+        "DisplayName": "MyStack-Api",
+        "ObjectName": "LocalSystem",
+        "Name": "MyStack-Api",
+        "Start": "SERVICE_AUTO_START",
+        "Type": "SERVICE_WIN32_OWN_PROCESS"
+    },
+    {
+        "Application": "C:\\Program Files\\nodejs\\node.exe",
+        "AppParameters": "worker.js",
+        "AppDirectory": "C:\\InstalledServices\\MyStack",
+        "DisplayName": "MyStack-Worker",
+        "ObjectName": "LocalSystem",
+        "Name": "MyStack-Worker",
+        "Start": "SERVICE_AUTO_START",
+        "Type": "SERVICE_WIN32_OWN_PROCESS"
+    }
+]
+```
+
+`-Import`, `-Reset`, and `-Export` all understand this: importing/resetting a folder whose `nsnssmcm.json` is an array creates/removes/recreates every service listed in it, and exporting a service into a folder that already has other services recorded there merges in rather than overwriting them.
 
 ## Recommended setup
 
@@ -92,6 +121,20 @@ If you created a service manually (using the GUI or CLI), you can bring it under
 This generates a `nsnssmcm.json` for an existing NSSM-managed service.
 
 Once exported, the configuration becomes portable and reproducible.
+
+---
+
+### Scenario 4: Multi-Service Deployments
+
+If several services belong together (an API and its worker, an app and a companion process, etc.), they can share one folder and one `nsnssmcm.json` containing an array of service objects (see the example above).
+
+   `.\nsnssmcm.ps1 -Import "MyStack"`
+
+This will create/apply/start every service defined in the array, in order.
+
+   `.\nsnssmcm.ps1 -Reset "MyStack"`
+
+This removes and recreates every service in the array from the JSON definition.
 
 ## Philosophy
 

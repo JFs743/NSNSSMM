@@ -6,10 +6,14 @@
     This script manages NSSM (Non-Sucking Service Manager) services by allowing users to
     import, export, reset, or create new service configurations.
     It uses a JSON file (nsnssmcm.json) to store and retrieve service settings.
+    A nsnssmcm.json file may contain either a single service object, or an array of
+    service objects for a multi-service deployment sharing the same folder.
 
 .PARAMETER Import
     Imports the configuration of an NSSM-managed service from a JSON file located in the
     ./<service_name>/nsnssmcm.json file and creates the service if it does not exist.
+    If nsnssmcm.json contains an array of service objects, every service in the array is
+    created/imported (multi-service deployment).
     May be called with multiple service names, a single service name, or no service name to import all
     configurations found in the current directory.
 
@@ -21,6 +25,8 @@
 
 .PARAMETER Reset
     Resets the configuration of an NSSM-managed service by removing and recreating it from its JSON file.
+    If nsnssmcm.json contains an array of service objects, every service in the array is removed
+    and recreated (multi-service deployment).
     May be called with multiple service names, a single service name, or no service name to reset all
     configurations found in the current directory.
 
@@ -190,20 +196,72 @@ function Export-NSNSSMCM_Config {
                 $config_content[$key] = $value
             }
         }
+
+        # If nsnssmcm.json already exists, it may hold other services for a
+        # multi-service deployment sharing this folder. Preserve those entries
+        # and only replace the one matching this service's Name.
+        $other_entries = @()
+        if (Test-Path -Path $config_path) {
+            try {
+                $existing_content = Get-Content -Path $config_path | ConvertFrom-Json
+                $other_entries = @($existing_content) | Where-Object { $_.Name -ne $service_name }
+            } catch {
+                Write-Host "Could not parse existing $config_path, it will be overwritten."
+            }
+        }
+
+        $all_entries = @($other_entries) + [PSCustomObject]$config_content
+
         try {
-            $config_content | ConvertTo-Json | Set-Content -Path $config_path -ErrorAction Stop
+            if ($all_entries.Count -eq 1) {
+                $all_entries[0] | ConvertTo-Json | Set-Content -Path $config_path -ErrorAction Stop
+            } else {
+                $all_entries | ConvertTo-Json -Depth 5 | Set-Content -Path $config_path -ErrorAction Stop
+            }
             Write-Host "Created nsnssmcm.json at $config_path"
         } catch {
             Write-Host "Failed to create nsnssmcm.json for service: $service_name."
             Write-Host ''
             Write-Host ''
-            $config_content | ConvertTo-Json | Write-Host
+            $all_entries | ConvertTo-Json -Depth 5 | Write-Host
         }
     } else {
         Write-Host "Service $service_name does not exist. Skipping export."
     }
 }
 
+
+
+function Import-NSNSSMCM_ServiceEntry {
+    param (
+        [Parameter(Mandatory = $true)]
+        [PSCustomObject]$ServiceEntry
+    )
+
+    $windowsService = Get-Service -Name $ServiceEntry.Name -ErrorAction SilentlyContinue
+
+    if (-not $windowsService) {
+        Write-Host "Creating service: $($ServiceEntry.Name)"
+
+        $nssm_args = @(
+            'install', $ServiceEntry.Name, $ServiceEntry.Application
+        )
+        & $nssm_file @nssm_args
+    }
+
+    foreach ($key in $ServiceEntry.PSObject.Properties.Name) {
+        if ($key -notin @('Application', 'Name')) {
+            Write-Host "Setting $key to $($ServiceEntry.$key) for $($ServiceEntry.Name)"
+            $nssm_args = @(
+                'set', $ServiceEntry.Name, $key, $ServiceEntry.$key
+            )
+            & $nssm_file @nssm_args
+        }
+    }
+
+    Write-Host "Starting service: $($ServiceEntry.Name)"
+    Start-Service -Name $ServiceEntry.Name
+}
 
 
 function Import-NSNSSMCM_Config {
@@ -213,30 +271,16 @@ function Import-NSNSSMCM_Config {
 
     Write-Host "Importing NSNSSMCM Config: $Config"
 
-
     $config_path = Get-Item -Path "./$Config/nsnssmcm.json"
     $config_content = Get-Content -Path $config_path | ConvertFrom-Json
 
-    $windowsService = Get-Service -Name $config_content.Name -ErrorAction SilentlyContinue
+    # nsnssmcm.json may hold a single service object, or an array of service
+    # objects when multiple services share this folder (multi-service deployment).
+    $service_entries = @($config_content)
 
-    if (-not $windowsService) {
-        Write-Host "Creating service: $($config_content.Name)"
-
-        $nssm_args = @(
-            'install', $config_content.Name, $config_content.Application
-        )
-        & $nssm_file @nssm_args
+    foreach ($service_entry in $service_entries) {
+        Import-NSNSSMCM_ServiceEntry -ServiceEntry $service_entry
     }
-
-    foreach ($key in $config_content.PSObject.Properties.Name) {
-        if ($key -notin @('Application', 'Name')) {
-            Write-Host "Setting $key to $($config_content.$key)"
-            & $nssm_file 'set', $config_content.Name, $key, $config_content.$key
-        }
-    }
-
-    Write-Host "Starting service: $($config_content.Name)"
-    Start-Service -Name $config_content.Name
 }
 
 
@@ -247,18 +291,25 @@ function Reset-NSNSSMCM_Config {
 
     Write-Host "Resetting NSNSSMCM Config: $Config"
 
-
     $config_path = Get-Item "$Config/nsnssmcm.json" | Select-Object -ExpandProperty FullName
-    $service_name = Get-Item -Path $config_path |
-        Select-Object -ExpandProperty DirectoryName |
-            Split-Path -Leaf
+    $config_content = Get-Content -Path $config_path | ConvertFrom-Json
 
-    Write-Host "Recreating service: $service_name from $config_path"
+    # nsnssmcm.json may hold a single service object, or an array of service
+    # objects when multiple services share this folder (multi-service deployment).
+    # Every service named in it gets removed here, then recreated by the Import call below.
+    $service_entries = @($config_content)
 
-    $nssm_args = @(
-        'remove', $service_name, 'confirm'
-    )
-    & $nssm_file @nssm_args
+    foreach ($service_entry in $service_entries) {
+        $service_name = $service_entry.Name
+
+        Write-Host "Removing service: $service_name from $config_path"
+
+        $nssm_args = @(
+            'remove', $service_name, 'confirm'
+        )
+        & $nssm_file @nssm_args
+    }
+
     Import-NSNSSMCM_Config -Config $Config
 }
 
